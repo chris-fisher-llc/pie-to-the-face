@@ -7,7 +7,7 @@ st.set_page_config(page_title="DP Show Wall of Shame", page_icon="🥧", layout=
 
 # Point this to your raw GitHub URL if deploying! 
 # e.g. "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/data/FULL_LEDGER.csv"
-DATA_SOURCE = "data/FULL_LEDGER.csv" 
+DATA_SOURCE = "FULL_LEDGER.csv" 
 
 # --- DATA LOADING ---
 @st.cache_data
