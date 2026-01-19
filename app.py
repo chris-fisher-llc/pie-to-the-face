@@ -7,7 +7,7 @@ st.set_page_config(page_title="DP Show Wall of Shame", page_icon="🥧", layout=
 
 # Point this to your raw GitHub URL if deploying! 
 # e.g. "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/data/FULL_LEDGER.csv"
-DATA_SOURCE = "FULL_LEDGER.csv" 
+DATA_SOURCE = "data/FULL_LEDGER.csv" 
 
 # --- DATA LOADING ---
 @st.cache_data
@@ -24,11 +24,14 @@ def load_data():
 df = load_data()
 
 if df.empty:
+    st.warning("No data found in the ledger.")
     st.stop()
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("Filter the Ledger")
 all_guys = sorted(list(set(df['Proposer'].unique()) | set(df['Acceptor'].unique())))
+if "Unknown" in all_guys: all_guys.remove("Unknown")
+
 selected_guy = st.sidebar.selectbox("Select a Danette", ["All"] + all_guys)
 
 if selected_guy != "All":
@@ -89,7 +92,6 @@ st.header("🏆 The Leaderboard")
 # Create Stats DataFrame
 stats = []
 for person in all_guys:
-    if person == "Unknown": continue
     
     # Wins: Listed as Winner
     wins = len(df[df['Winner'] == person])
@@ -113,34 +115,41 @@ for person in all_guys:
             "Total Bets": total_decided
         })
 
-stats_df = pd.DataFrame(stats).sort_values(by="Wins", ascending=False)
+if stats:
+    stats_df = pd.DataFrame(stats).sort_values(by="Wins", ascending=False)
 
-c_table, c_chart = st.columns([1, 1])
+    # FIX: Safely calculate max value and cast to standard int
+    max_unpaid_val = int(stats_df['Unpaid Debts'].max()) if not stats_df.empty else 10
+    if max_unpaid_val == 0: max_unpaid_val = 1 # Prevent div by zero in progress bar logic
 
-with c_table:
-    st.dataframe(
-        stats_df,
-        column_config={
-            "Win %": st.column_config.NumberColumn(format="%.1f%%"),
-            "Unpaid Debts": st.column_config.ProgressColumn(
-                "Shame Meter", 
-                format="%d", 
-                min_value=0, 
-                max_value=stats_df['Unpaid Debts'].max()
-            ),
-        },
-        use_container_width=True,
-        hide_index=True
-    )
+    c_table, c_chart = st.columns([1, 1])
 
-with c_chart:
-    # Simple Bar Chart of Wins vs Losses
-    if not stats_df.empty:
-        # Melt for plotting
-        melted = stats_df.melt(id_vars=["Name"], value_vars=["Wins", "Losses"], var_name="Result", value_name="Count")
-        fig = px.bar(melted, x="Name", y="Count", color="Result", barmode="group", 
-                     color_discrete_map={"Wins": "#2ecc71", "Losses": "#e74c3c"})
-        st.plotly_chart(fig, use_container_width=True)
+    with c_table:
+        st.dataframe(
+            stats_df,
+            column_config={
+                "Win %": st.column_config.NumberColumn(format="%.1f%%"),
+                "Unpaid Debts": st.column_config.ProgressColumn(
+                    "Shame Meter", 
+                    format="%d", 
+                    min_value=0, 
+                    max_value=max_unpaid_val
+                ),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+
+    with c_chart:
+        # Simple Bar Chart of Wins vs Losses
+        if not stats_df.empty:
+            # Melt for plotting
+            melted = stats_df.melt(id_vars=["Name"], value_vars=["Wins", "Losses"], var_name="Result", value_name="Count")
+            fig = px.bar(melted, x="Name", y="Count", color="Result", barmode="group", 
+                        color_discrete_map={"Wins": "#2ecc71", "Losses": "#e74c3c"})
+            st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No active bet stats available yet.")
 
 # --- SECTION 3: RECENT ACTIVITY ---
 st.markdown("---")
