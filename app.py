@@ -4,7 +4,7 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DP Show Bet Tracker", page_icon="🥧", layout="wide")
-DATA_SOURCE = "data/FULL_LEDGER.csv"
+DATA_SOURCE = "FULL_LEDGER.csv"
 
 # The Main Cast for the Leaderboard
 MAIN_CAST = ["Dan Patrick", "Paulie Pabst", "Todd Fritz", "Seton O'Connor", "Marvin Prince", "Dylan"]
@@ -138,4 +138,5 @@ st.markdown("---")
 c1, c2, c3 = st.columns(3)
 c1.metric("Total Bets Visible", len(view_df))
 c2.metric("Unpaid in View", len(view_df[view_df['Status'] == 'Unpaid']))
+
 c3.metric("Pending in View", len(view_df[view_df['Status'] == 'Pending']))
