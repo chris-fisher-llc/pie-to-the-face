@@ -33,7 +33,6 @@ st.sidebar.title("🥧 Bet Tracker")
 
 # 1. Person Filter
 all_people = sorted(list(set(df['Proposer'].unique()) | set(df['Acceptor'].unique())))
-# Ensure Main Cast is at the top
 sorted_people = [p for p in MAIN_CAST if p in all_people] + [p for p in all_people if p not in MAIN_CAST]
 selected_person = st.sidebar.selectbox("Select Personality", ["All"] + sorted_people)
 
@@ -55,17 +54,18 @@ else:
 if selected_status != "All":
     view_df = view_df[view_df['Status'] == selected_status]
 
-# --- SECTION 1: THE LEADERBOARD (Top Level) ---
+# Sort: Unpaid first, then newest
+view_df = view_df.sort_values(by=["Status", "Bet Date"], ascending=[False, False])
+
+# --- SECTION 1: THE SCOREBOARD (Top Level) ---
 st.header("🏆 The Scoreboard")
 
 stats = []
 for person in MAIN_CAST:
-    # Use global dataframe for stats to ensure accuracy regardless of filters
+    # Use global dataframe for stats
     p_df = df 
-    
     wins = len(p_df[p_df['Winner'] == person])
     losses = len(p_df[p_df['Loser'] == person])
-    
     # Unpaid: Must be the Loser AND Status is Unpaid
     unpaid = len(p_df[(p_df['Loser'] == person) & (p_df['Status'] == 'Unpaid')])
     
@@ -82,14 +82,12 @@ for person in MAIN_CAST:
 
 stats_df = pd.DataFrame(stats).sort_values(by="Wins", ascending=False)
 
-# Display Leaderboard
 st.dataframe(
     stats_df,
     use_container_width=True,
     hide_index=True,
     column_config={
         "Name": st.column_config.TextColumn("Member", width="medium"),
-        "Win %": st.column_config.TextColumn("Win %"), # Formatted string
         "Unpaid Debts": st.column_config.NumberColumn(
             "Unpaid Debts 🚩", 
             help="Bets lost but not honored",
@@ -98,45 +96,76 @@ st.dataframe(
     }
 )
 
-# --- SECTION 2: DETAILED BET HISTORY ---
 st.markdown("---")
-st.subheader(f"📜 Bet Details ({len(view_df)} Records)")
 
-# Sort: Unpaid first, then newest dates
-view_df = view_df.sort_values(by=["Status", "Bet Date"], ascending=[False, False])
+# --- SECTION 2: MASTER-DETAIL VIEW ---
+st.subheader("📜 Bet Inspector")
 
-# Select Columns for Display
-display_cols = [
-    "Bet Date", "Summary", "Quote of Record", "Proposer", "Acceptor", 
-    "Winner", "Loser", "Stake", "Status", 
-    "Decision Date", "Confidence", "Reasoning"
-]
+# Layout: 2 Columns
+col_master, col_detail = st.columns([2, 3])
 
-# Rename for UI
-display_df = view_df[display_cols].rename(columns={
-    "Decision Date": "Outcome Date",
-    "Confidence": "AI Projected Accuracy"
-})
+with col_master:
+    st.markdown("### 1. Select a Bet")
+    
+    # Prepare a clean table for selection
+    # We use a selectbox for "Master" selection as it's the most robust across Streamlit versions
+    # Create a unique label for each bet
+    view_df['Label'] = view_df.apply(
+        lambda x: f"{x['Bet Date'].strftime('%m/%d/%y')} - {x['Proposer']} vs {x['Acceptor']}: {x['Summary'][:50]}...", 
+        axis=1
+    )
+    
+    bet_options = view_df['Label'].tolist()
+    
+    if bet_options:
+        selected_label = st.selectbox("Choose from list:", bet_options, index=0)
+        # Find the row that matches this label
+        selected_row = view_df[view_df['Label'] == selected_label].iloc[0]
+    else:
+        st.info("No bets match current filters.")
+        st.stop()
 
-st.dataframe(
-    display_df,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Bet Date": st.column_config.DateColumn("Placed", format="MM/DD/YYYY"),
-        "Outcome Date": st.column_config.DateColumn("Outcome", format="MM/DD/YYYY"),
-        "Summary": st.column_config.TextColumn("Bet Condition", width="medium"),
-        "Quote of Record": st.column_config.TextColumn("Transcript Quote", width="large", help="The exact moment the bet was made"),
-        "Reasoning": st.column_config.TextColumn("AI Logic", width="large", help="Hover to read full reasoning"),
-        "Status": st.column_config.Column("Status", width="small"),
-        "AI Projected Accuracy": st.column_config.Column("AI Confidence", width="small"),
-    }
-)
+with col_detail:
+    st.markdown("### 2. Bet Details")
+    
+    # Create a Card-like container
+    with st.container(border=True):
+        # Header
+        st.subheader(f"{selected_row['Proposer']} vs. {selected_row['Acceptor']}")
+        st.caption(f"Placed on: {selected_row['Bet Date'].strftime('%B %d, %Y')}")
+        
+        # The Quote (Hero Content)
+        st.markdown(f"#### ❝ {selected_row['Quote of Record']} ❞")
+        
+        st.divider()
+        
+        # Key Stats Grid
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Status", selected_row['Status'], 
+                 delta="UNPAID" if selected_row['Status']=="Unpaid" else None, 
+                 delta_color="inverse")
+        m2.metric("Winner", selected_row['Winner'])
+        m3.metric("Loser", selected_row['Loser'])
+        
+        m4, m5, m6 = st.columns(3)
+        m4.metric("Stake", selected_row['Stake'] if pd.notna(selected_row['Stake']) else "N/A")
+        m5.metric("Outcome Date", 
+                 selected_row['Decision Date'].strftime('%m/%d/%y') if pd.notna(selected_row['Decision Date']) else "Pending")
+        m6.metric("AI Accuracy", selected_row['Confidence'])
+        
+        st.divider()
+        
+        # Expandable Logic
+        with st.expander("🔎 See AI Logic & Evidence"):
+            st.markdown("**Reasoning:**")
+            st.write(selected_row['Reasoning'])
+            
+            st.markdown("**Search Verification:**")
+            st.info(selected_row['Search Context'])
 
 # --- METRICS FOOTER ---
 st.markdown("---")
-c1, c2, c3 = st.columns(3)
-c1.metric("Total Bets Visible", len(view_df))
-c2.metric("Unpaid in View", len(view_df[view_df['Status'] == 'Unpaid']))
-
-c3.metric("Pending in View", len(view_df[view_df['Status'] == 'Pending']))
+f1, f2, f3 = st.columns(3)
+f1.metric("Total Bets Visible", len(view_df))
+f2.metric("Unpaid in View", len(view_df[view_df['Status'] == 'Unpaid']))
+f3.metric("Pending in View", len(view_df[view_df['Status'] == 'Pending']))
