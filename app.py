@@ -4,7 +4,7 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DP Show Bet Tracker", page_icon="🥧", layout="wide")
-DATA_SOURCE = "data/FULL_LEDGER.csv"
+DATA_SOURCE = "FULL_LEDGER.csv"
 MAIN_CAST = ["Dan Patrick", "Paulie Pabst", "Todd Fritz", "Seton O'Connor", "Marvin Prince", "Dylan"]
 
 # --- DATA LOADING ---
@@ -124,3 +124,4 @@ if bet_options:
         
         st.markdown("**AI Reasoning:**")
         st.info(row.get('Reasoning', 'No reasoning available.'))
+
