@@ -4,19 +4,27 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DP Show Bet Tracker", page_icon="🥧", layout="wide")
-DATA_SOURCE = "FULL_LEDGER.csv"
+DATA_SOURCE = "data/FULL_LEDGER.csv"
 MAIN_CAST = ["Dan Patrick", "Paulie Pabst", "Todd Fritz", "Seton O'Connor", "Marvin Prince", "Dylan"]
 
 # --- DATA LOADING ---
 @st.cache_data
 def load_data():
     try:
+        # Read CSV
         df = pd.read_csv(DATA_SOURCE)
+        
+        # CRITICAL FIX: Fill missing values with empty strings to prevent 'float' errors
+        df = df.fillna("")
+        
+        # Convert Dates
         df['Bet Date'] = pd.to_datetime(df['Bet Date'], errors='coerce')
         df['Decision Date'] = pd.to_datetime(df['Decision Date'], errors='coerce')
+        
         # Generate ID if missing (backward compatibility)
         if 'Bet ID' not in df.columns:
             df['Bet ID'] = [f"BET-{i:03d}" for i in range(1, len(df)+1)]
+            
         return df
     except Exception as e:
         st.error(f"Error loading data: {e}")
@@ -69,6 +77,9 @@ st.caption("Use the 'Bet ID' to see full details below.")
 
 # Simplified Table (No long text)
 display_cols = ["Bet ID", "Bet Date", "Summary", "Proposer", "Acceptor", "Winner", "Loser", "Stake", "Status"]
+
+# Filter existing columns only
+display_cols = [c for c in display_cols if c in view_df.columns]
 display_df = view_df[display_cols].copy()
 
 st.dataframe(
@@ -88,7 +99,8 @@ st.markdown("---")
 st.header("🔎 Bet Inspector")
 
 # Dropdown for ID Selection
-bet_options = view_df.apply(lambda x: f"{x['Bet ID']} | {x['Summary'][:60]}...", axis=1).tolist()
+# FIX: Use str() to ensure it doesn't crash on empty summaries
+bet_options = view_df.apply(lambda x: f"{x['Bet ID']} | {str(x['Summary'])[:60]}...", axis=1).tolist()
 
 if bet_options:
     selected_option = st.selectbox("Select a Bet ID to inspect:", bet_options)
@@ -100,7 +112,9 @@ if bet_options:
         st.subheader(f"{row['Bet ID']}: {row['Proposer']} vs {row['Acceptor']}")
         st.markdown(f"**Condition:** {row['Summary']}")
         
-        st.markdown(f"#### ❝ {row['Quote of Record']} ❞")
+        # Handle potentially missing 'Quote of Record' safely
+        quote = row.get('Quote of Record', 'No quote available.')
+        st.markdown(f"#### ❝ {quote} ❞")
         st.divider()
         
         c1, c2, c3 = st.columns(3)
@@ -109,4 +123,4 @@ if bet_options:
         c3.metric("Status", row['Status'], delta="UNPAID" if row['Status']=='Unpaid' else None, delta_color="inverse")
         
         st.markdown("**AI Reasoning:**")
-        st.info(row['Reasoning'])
+        st.info(row.get('Reasoning', 'No reasoning available.'))
