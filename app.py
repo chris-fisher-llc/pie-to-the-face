@@ -36,16 +36,34 @@ if df.empty: st.stop()
 # --- SIDEBAR ---
 st.sidebar.title("🥧 Bet Tracker")
 all_people = sorted(list(set(df['Proposer'].unique()) | set(df['Acceptor'].unique())))
-sorted_people = [p for p in MAIN_CAST if p in all_people] + [p for p in all_people if p not in MAIN_CAST]
+
+# Create a clean list for the dropdown
+# We map partial matches (e.g. "Marvin") to full names ("Marvin Prince") for sorting
+sorted_people = []
+for person in MAIN_CAST:
+    sorted_people.append(person)
+    
+# Add anyone else found in the data who isn't in the main cast
+for p in all_people:
+    if not any(main in p or p in main for main in MAIN_CAST):
+        sorted_people.append(p)
+
 selected_person = st.sidebar.selectbox("Select Personality", ["All"] + sorted_people)
 
 status_options = ["All"] + sorted(list(df['Status'].unique()))
 selected_status = st.sidebar.selectbox("Filter by Status", status_options)
 
-# Filter Logic
+# Filter Logic (Robust String Matching)
 if selected_person != "All":
-    view_df = df[(df['Proposer'] == selected_person) | (df['Acceptor'] == selected_person) |
-                 (df['Winner'] == selected_person) | (df['Loser'] == selected_person)]
+    # Check if the selected person is part of the name string
+    # e.g. "Marvin" should match "Marvin Prince"
+    mask = (
+        df['Proposer'].str.contains(selected_person, case=False, na=False) | 
+        df['Acceptor'].str.contains(selected_person, case=False, na=False) |
+        df['Winner'].str.contains(selected_person, case=False, na=False) | 
+        df['Loser'].str.contains(selected_person, case=False, na=False)
+    )
+    view_df = df[mask]
 else:
     view_df = df
 
@@ -54,14 +72,28 @@ if selected_status != "All":
 
 view_df = view_df.sort_values(by=["Status", "Bet Date"], ascending=[False, False])
 
-# --- 1. SCOREBOARD ---
+# --- 1. SCOREBOARD (Robust Matching) ---
 st.header("🏆 The Scoreboard")
 stats = []
 for person in MAIN_CAST:
+    # We split the name to handle "Marvin" vs "Marvin Prince"
+    # Logic: If "Marvin" is in the Winner column, count it.
+    first_name = person.split()[0]
+    
     p_df = df 
-    wins = len(p_df[p_df['Winner'] == person])
-    losses = len(p_df[p_df['Loser'] == person])
-    unpaid = len(p_df[(p_df['Loser'] == person) & (p_df['Status'] == 'Unpaid')])
+    
+    # Wins: Count if Full Name OR First Name is in the Winner column
+    wins = len(p_df[p_df['Winner'].str.contains(first_name, case=False, na=False)])
+    
+    # Losses
+    losses = len(p_df[p_df['Loser'].str.contains(first_name, case=False, na=False)])
+    
+    # Unpaid
+    unpaid = len(p_df[
+        (p_df['Loser'].str.contains(first_name, case=False, na=False)) & 
+        (p_df['Status'] == 'Unpaid')
+    ])
+    
     total = wins + losses
     pct = (wins / total * 100) if total > 0 else 0.0
     stats.append({"Name": person, "Wins": wins, "Losses": losses, "Win %": f"{pct:.1f}%", "Unpaid Debts": unpaid})
@@ -75,12 +107,10 @@ st.markdown("---")
 st.header("📜 Bet History")
 st.caption("👆 Click on any row below to inspect the full details.")
 
-# Simplified Table Columns (Added Time if it exists)
 display_cols = ["Bet ID", "Bet Date", "Summary", "Proposer", "Acceptor", "Winner", "Loser", "Stake", "Status"]
 display_cols = [c for c in display_cols if c in view_df.columns]
 display_df = view_df[display_cols].copy()
 
-# RENDER INTERACTIVE DATAFRAME
 selection = st.dataframe(
     display_df,
     use_container_width=True,
@@ -96,10 +126,9 @@ selection = st.dataframe(
 
 st.markdown("---")
 
-# --- 3. DETAIL INSPECTOR (Reacts to Click) ---
+# --- 3. DETAIL INSPECTOR ---
 st.header("🔎 Bet Inspector")
 
-# Check if a row is selected
 if len(selection.selection.rows) > 0:
     selected_index = selection.selection.rows[0]
     selected_bet_id = display_df.iloc[selected_index]["Bet ID"]
@@ -108,12 +137,9 @@ if len(selection.selection.rows) > 0:
     with st.container(border=True):
         st.subheader(f"{row['Bet ID']}: {row['Proposer']} vs {row['Acceptor']}")
         
-        # Display Time/Episode if available
-        # We assume columns 'Episode' and 'Time' exist now
         meta_info = f"Placed on: **{row['Bet Date'].strftime('%B %d, %Y')}**"
         if 'Time' in row and row['Time']:
              meta_info += f" @ **{row['Time']}**"
-        
         st.markdown(meta_info)
         
         if 'Episode' in row and row['Episode']:
@@ -131,10 +157,8 @@ if len(selection.selection.rows) > 0:
         c2.metric("Loser", row['Loser'])
         c3.metric("Status", row['Status'], delta="UNPAID" if row['Status']=='Unpaid' else None, delta_color="inverse")
         
-        # IMPROVED REASONING SECTION (Full Width, Blue Box)
         st.markdown("### 🧠 AI Reasoning")
         st.info(f"{row.get('Reasoning', 'No reasoning available.')}")
         
 else:
-
     st.info("👈 Select a bet from the table above to see the AI analysis, quotes, and reasoning.")
