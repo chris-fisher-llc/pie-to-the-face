@@ -14,7 +14,7 @@ def load_data():
         # Read CSV
         df = pd.read_csv(DATA_SOURCE)
         
-        # CRITICAL FIX: Fill missing values with empty strings to prevent 'float' errors
+        # Fill missing values to prevent crashes
         df = df.fillna("")
         
         # Convert Dates
@@ -75,7 +75,7 @@ st.markdown("---")
 st.header("📜 Bet History")
 st.caption("👆 Click on any row below to inspect the full details.")
 
-# Simplified Table Columns
+# Simplified Table Columns (Added Time if it exists)
 display_cols = ["Bet ID", "Bet Date", "Summary", "Proposer", "Acceptor", "Winner", "Loser", "Stake", "Status"]
 display_cols = [c for c in display_cols if c in view_df.columns]
 display_df = view_df[display_cols].copy()
@@ -90,8 +90,8 @@ selection = st.dataframe(
         "Summary": st.column_config.TextColumn("Bet Condition", width="large"),
         "Status": st.column_config.Column("Status", width="small"),
     },
-    selection_mode="single-row",  # Enable row selection
-    on_select="rerun"             # Rerun app when clicked
+    selection_mode="single-row",
+    on_select="rerun"
 )
 
 st.markdown("---")
@@ -101,20 +101,27 @@ st.header("🔎 Bet Inspector")
 
 # Check if a row is selected
 if len(selection.selection.rows) > 0:
-    # Get the index of the selected row in the DISPLAY dataframe
     selected_index = selection.selection.rows[0]
-    
-    # Map that index back to the Bet ID using iloc
     selected_bet_id = display_df.iloc[selected_index]["Bet ID"]
-    
-    # Retrieve the full row from the MAIN dataframe (view_df)
     row = view_df[view_df['Bet ID'] == selected_bet_id].iloc[0]
 
     with st.container(border=True):
         st.subheader(f"{row['Bet ID']}: {row['Proposer']} vs {row['Acceptor']}")
+        
+        # Display Time/Episode if available
+        # We assume columns 'Episode' and 'Time' exist now
+        meta_info = f"Placed on: **{row['Bet Date'].strftime('%B %d, %Y')}**"
+        if 'Time' in row and row['Time']:
+             meta_info += f" @ **{row['Time']}**"
+        
+        st.markdown(meta_info)
+        
+        if 'Episode' in row and row['Episode']:
+            st.caption(f"📺 Episode: {row['Episode']}")
+            
+        st.divider()
         st.markdown(f"**Condition:** {row['Summary']}")
         
-        # Handle potentially missing 'Quote of Record' safely
         quote = row.get('Quote of Record', 'No quote available.')
         st.markdown(f"#### ❝ {quote} ❞")
         st.divider()
@@ -124,7 +131,9 @@ if len(selection.selection.rows) > 0:
         c2.metric("Loser", row['Loser'])
         c3.metric("Status", row['Status'], delta="UNPAID" if row['Status']=='Unpaid' else None, delta_color="inverse")
         
-        st.markdown("**AI Reasoning:**")
-        st.info(row.get('Reasoning', 'No reasoning available.'))
+        # IMPROVED REASONING SECTION (Full Width, Blue Box)
+        st.markdown("### 🧠 AI Reasoning")
+        st.info(f"{row.get('Reasoning', 'No reasoning available.')}")
+        
 else:
     st.info("👈 Select a bet from the table above to see the AI analysis, quotes, and reasoning.")
