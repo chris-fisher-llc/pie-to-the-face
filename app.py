@@ -4,7 +4,7 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="DP Show Bet Tracker", page_icon="🥧", layout="wide")
-DATA_SOURCE = "FULL_LEDGER.csv"
+DATA_SOURCE = "data/FULL_LEDGER.csv"
 MAIN_CAST = ["Dan Patrick", "Paulie Pabst", "Todd Fritz", "Seton O'Connor", "Marvin Prince", "Dylan"]
 
 # --- DATA LOADING ---
@@ -71,18 +71,17 @@ st.dataframe(pd.DataFrame(stats).sort_values("Wins", ascending=False), use_conta
 
 st.markdown("---")
 
-# --- 2. SUMMARY TABLE ---
+# --- 2. SUMMARY TABLE (Interactive) ---
 st.header("📜 Bet History")
-st.caption("Use the 'Bet ID' to see full details below.")
+st.caption("👆 Click on any row below to inspect the full details.")
 
-# Simplified Table (No long text)
+# Simplified Table Columns
 display_cols = ["Bet ID", "Bet Date", "Summary", "Proposer", "Acceptor", "Winner", "Loser", "Stake", "Status"]
-
-# Filter existing columns only
 display_cols = [c for c in display_cols if c in view_df.columns]
 display_df = view_df[display_cols].copy()
 
-st.dataframe(
+# RENDER INTERACTIVE DATAFRAME
+selection = st.dataframe(
     display_df,
     use_container_width=True,
     hide_index=True,
@@ -90,23 +89,26 @@ st.dataframe(
         "Bet Date": st.column_config.DateColumn("Date", format="MM/DD/YYYY"),
         "Summary": st.column_config.TextColumn("Bet Condition", width="large"),
         "Status": st.column_config.Column("Status", width="small"),
-    }
+    },
+    selection_mode="single-row",  # Enable row selection
+    on_select="rerun"             # Rerun app when clicked
 )
 
 st.markdown("---")
 
-# --- 3. DETAIL INSPECTOR ---
+# --- 3. DETAIL INSPECTOR (Reacts to Click) ---
 st.header("🔎 Bet Inspector")
 
-# Dropdown for ID Selection
-# FIX: Use str() to ensure it doesn't crash on empty summaries
-bet_options = view_df.apply(lambda x: f"{x['Bet ID']} | {str(x['Summary'])[:60]}...", axis=1).tolist()
-
-if bet_options:
-    selected_option = st.selectbox("Select a Bet ID to inspect:", bet_options)
-    # Extract ID
-    selected_id = selected_option.split(" | ")[0]
-    row = view_df[view_df['Bet ID'] == selected_id].iloc[0]
+# Check if a row is selected
+if len(selection.selection.rows) > 0:
+    # Get the index of the selected row in the DISPLAY dataframe
+    selected_index = selection.selection.rows[0]
+    
+    # Map that index back to the Bet ID using iloc
+    selected_bet_id = display_df.iloc[selected_index]["Bet ID"]
+    
+    # Retrieve the full row from the MAIN dataframe (view_df)
+    row = view_df[view_df['Bet ID'] == selected_bet_id].iloc[0]
 
     with st.container(border=True):
         st.subheader(f"{row['Bet ID']}: {row['Proposer']} vs {row['Acceptor']}")
@@ -124,4 +126,5 @@ if bet_options:
         
         st.markdown("**AI Reasoning:**")
         st.info(row.get('Reasoning', 'No reasoning available.'))
-
+else:
+    st.info("👈 Select a bet from the table above to see the AI analysis, quotes, and reasoning.")
